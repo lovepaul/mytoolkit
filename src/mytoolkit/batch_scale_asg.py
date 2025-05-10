@@ -16,18 +16,20 @@ from mytoolkit.utils import get_logger, echo_error, echo_info
 app = typer.Typer(add_completion=False)
 console = Console()
 
-
 @app.command("batch-scale-asg")
 def batch_scale_asg(
-        get_template: bool = typer.Option(
-            False, "--get-template-json", "-t",
-            help="根据 discover-asg 输出生成批量缩放模板"
-        ),
-        input_json: str = typer.Option(
-            None, "--input-json", "-i",
-            help="discover-asg 输出文件路径 (支持 Windows/Mac)"
-        ),
-        region: str = typer.Option(None, "--region", "-r", help="AWS 区域")
+    get_template: bool = typer.Option(
+        False, "--get-template-json", "-t",
+        help="根据 discover-asg 输出生成批量缩放模板"
+    ),
+    input_json: str = typer.Option(
+        None, "--input-json", "-i",
+        help="discover-asg 输出文件路径 (支持 Windows/Mac)"
+    ),
+    region: str = typer.Option(
+        None, "--region", "-r",
+        help="AWS 区域 (例如 ap-east-1, cn-northwest-1)"
+    ),
 ):
     """
     生成或执行批量 ASG 扩/缩容计划 (JSON 对象形式)。
@@ -44,6 +46,15 @@ def batch_scale_asg(
     }
     """
     logger = get_logger("batch-scale-asg")
+
+    # —— 0. 区域选择 —— #
+    if region is None:
+        console.print("请选择 AWS 区域：")
+        console.print("  [1] Asia Pacific (Hong Kong)        ap-east-1")
+        console.print("  [2] China (Ningxia)                   cn-northwest-1")
+        choice = Prompt.ask("输入编号", choices=["1", "2"], default="1")
+        region = "ap-east-1" if choice == "1" else "cn-northwest-1"
+    logger.info(f"使用区域: {region}")
 
     # AWS session and identity
     session = boto3.session.Session(region_name=region)
@@ -64,7 +75,7 @@ def batch_scale_asg(
             echo_error(f"文件不存在：{disc_path}")
             raise typer.Exit(1)
 
-        # 1.b 读取
+        # 1.b 读取 discovered
         with open(disc_path, "r", encoding="utf-8") as f:
             discovered = json.load(f)
 
@@ -85,7 +96,7 @@ def batch_scale_asg(
             )
             logger.info(f"Invalid entries filtered: {invalid}")
 
-        # 1.d 构建模板
+        # 1.d 构建模板映射
         template = {}
         for ec2, asg in valid:
             detail = asg_cli.describe_auto_scaling_groups(
@@ -99,7 +110,7 @@ def batch_scale_asg(
                 "asg_name": asg,
                 "created": created,
                 "current": {"n": mn, "d": cd, "x": mx},
-                "target": {"n": mn, "d": cd, "x": mx}
+                "target":  {"n": mn, "d": cd, "x": mx}
             }
 
         # 1.e 写入模板文件
@@ -127,7 +138,7 @@ def batch_scale_asg(
         echo_error(f"输入文件为空：{plan_path}")
         raise typer.Exit(1)
 
-    # 2.a 加载
+    # 2.a 加载计划
     try:
         with open(plan_path, "r", encoding="utf-8") as f:
             plan = json.load(f)
@@ -138,7 +149,7 @@ def batch_scale_asg(
         echo_error("JSON 必须是非空对象 (mapping)")
         raise typer.Exit(1)
 
-    # 2.b 校验
+    # 2.b 校验字段与逻辑
     seen_asgs = set()
     for ec2, e in plan.items():
         asg = e.get("asg_name")
@@ -167,9 +178,7 @@ def batch_scale_asg(
             if not all((blk[k] is None or isinstance(blk[k], int)) for k in blk):
                 echo_error(f"[{ec2}] '{block}' 值必须为整数或 null")
                 raise typer.Exit(1)
-        tmin = e["target"]["n"]
-        td = e["target"]["d"]
-        tmax = e["target"]["x"]
+        tmin, td, tmax = e["target"]["n"], e["target"]["d"], e["target"]["x"]
         if not (tmin <= td <= tmax):
             echo_error(
                 f"[{ec2}] 对应 ASG [{asg}] 的目标配置不合法："
@@ -177,7 +186,7 @@ def batch_scale_asg(
             )
             raise typer.Exit(1)
 
-    # —— 3. 展示 & 确认 —— #
+    # 3. 展示并确认批量计划
     table = Table(title="批量缩放计划", header_style="bold magenta")
     table.add_column("No.", justify="right")
     table.add_column("ec2_name", style="cyan")
@@ -189,11 +198,11 @@ def batch_scale_asg(
         targ = f"{e['target']['n']}/{e['target']['d']}/{e['target']['x']}"
         table.add_row(str(idx), ec2, e["asg_name"], curr, targ)
     console.print(table)
-    if not Confirm.ask("确认以上批量缩放计划？"):
+    if not Confirm.ask("确认以上批量缩放计划？", default=False):
         console.print("[bold red]操作已取消[/bold red]")
         raise typer.Exit(0)
 
-    # —— 4. 遍历执行 —— #
+    # 4. 遍历执行，每项单独确认
     for ec2, e in plan.items():
         asg = e["asg_name"]
         detail = asg_cli.describe_auto_scaling_groups(
@@ -213,7 +222,7 @@ def batch_scale_asg(
             f" Target : [red]{tmin}/{td}/{tmax}[/red]"
         )
         console.print(Panel(info, title="单条确认", border_style="cyan"))
-        if not Confirm.ask(f"确认更新 {asg}?"):
+        if not Confirm.ask(f"确认更新 {asg}?", default=False):
             console.print(f"[yellow]已跳过 {asg}[/yellow]")
             e["status"] = "skipped"
             continue
@@ -233,7 +242,7 @@ def batch_scale_asg(
         e["updated_by"] = user_arn
         e["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # —— 5. 写回执行结果到日志目录 —— #
+    # 5. 写回执行结果到日志目录
     log_dir = os.path.join(os.getcwd(), "logs", "batch-scale-asg")
     os.makedirs(log_dir, exist_ok=True)
     result_path = os.path.join(
@@ -245,7 +254,6 @@ def batch_scale_asg(
 
     echo_info(f"✅ 批量缩放结果已保存：{result_path}")
     logger.info(f"Batch scale result written to {result_path}")
-
 
 if __name__ == "__main__":
     app()

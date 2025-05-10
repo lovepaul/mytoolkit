@@ -14,16 +14,20 @@ from mytoolkit.utils import get_logger, echo_error, echo_info
 app = typer.Typer(add_completion=False)
 console = Console()
 
-
 @app.command("discover-asg")
 def discover_asg(
-        get_temp_json: bool = typer.Option(
-            False, "--get-temp-json", "-t", help="生成服务关键词 JSON 模板"
-        ),
-        input_json: str = typer.Option(
-            None, "--input-json", "-i", help="输入 JSON 文件路径 (支持 Windows/Mac 路径)"
-        ),
-        region: str = typer.Option(None, "--region", "-r", help="AWS 区域")
+    get_temp_json: bool = typer.Option(
+        False, "--get-temp-json", "-t",
+        help="生成服务关键词 JSON 模板"
+    ),
+    input_json: str = typer.Option(
+        None, "--input-json", "-i",
+        help="输入 JSON 文件路径 (支持 Windows/Mac)"
+    ),
+    region: str = typer.Option(
+        None, "--region", "-r",
+        help="AWS 区域 (例如 ap-east-1, cn-northwest-1)"
+    )
 ):
     """
     批量根据模糊的 EC2 Name（即服务名）列表发现对应的 ASG 名称，
@@ -31,6 +35,16 @@ def discover_asg(
     输出 JSON 格式: [{"ec2_name":"ng","asg_name":"nginx-xx-asg"}, ...]
     """
     logger = get_logger("discover-asg")
+
+    # —— 0. 区域选择 —— #
+    if region is None:
+        console.print("请选择 AWS 区域：")
+        console.print("  [1] Asia Pacific (Hong Kong)        ap-east-1")
+        console.print("  [2] China (Ningxia)                   cn-northwest-1")
+        choice = Prompt.ask("输入编号", choices=["1", "2"], default="1")
+        region = "ap-east-1" if choice == "1" else "cn-northwest-1"
+    logger.info(f"使用区域: {region}")
+
     session = boto3.session.Session(region_name=region)
     ec2 = session.client("ec2")
 
@@ -75,10 +89,10 @@ def discover_asg(
     keywords = []
     for idx, entry in enumerate(items, start=1):
         if (
-                isinstance(entry, dict)
-                and "ec2_name" in entry
-                and isinstance(entry["ec2_name"], str)
-                and entry["ec2_name"].strip()
+            isinstance(entry, dict)
+            and "ec2_name" in entry
+            and isinstance(entry["ec2_name"], str)
+            and entry["ec2_name"].strip()
         ):
             keywords.append(entry["ec2_name"].strip())
         else:
@@ -124,8 +138,7 @@ def discover_asg(
                 "请选择对应的 ASG 编号",
                 choices=[str(i) for i in range(1, len(candidates) + 1)]
             )
-            sel = int(choice)
-            selected = candidates[sel - 1]
+            selected = candidates[int(choice) - 1]
         else:
             selected = candidates[0]
             console.print(f"[cyan]“{kw}” → [green]{selected}[/green]")
@@ -139,7 +152,6 @@ def discover_asg(
         json.dump(mapping, f, indent=2, ensure_ascii=False)
     echo_info(f"✅ 发现结果已导出至：{out_path}")
     logger.info(f"Exported mapping to {out_path}")
-
 
 if __name__ == "__main__":
     app()

@@ -13,28 +13,42 @@ from mytoolkit.utils import get_logger
 app = typer.Typer(add_completion=False)
 console = Console()
 
-
 @app.command("scale-asg")
 def scale_asg(
-        region: str = typer.Option(None, "--region", "-r", help="AWS 区域 (e.g. us-east-1)")
+    region: str = typer.Option(
+        None, "--region", "-r",
+        help="AWS 区域 (例如 ap-east-1, cn-northwest-1)"
+    )
 ):
     """
     交互式调整 Auto Scaling Group 容量，使用 Rich 丰富终端界面和进度条。
+    区域默认为 ap-east-1 或 cn-northwest-1，可通过 --region 覆盖。
     """
     logger = get_logger("scale-asg")
 
-    # —— 1. 初始化 AWS 客户端 ——
+    # —— 0. 区域选择 —— #
+    if region is None:
+        console.print("请选择 AWS 区域：")
+        console.print("  [1] Asia Pacific (Hong Kong)        ap-east-1")
+        console.print("  [2] China (Ningxia)                 cn-northwest-1")
+        choice = Prompt.ask(
+            "输入编号", choices=["1", "2"], default="1"
+        )
+        region = "ap-east-1" if choice == "1" else "cn-northwest-1"
+    logger.info(f"使用区域: {region}")
+
+    # —— 1. 初始化 AWS 客户端 —— #
     with Progress(SpinnerColumn(), TextColumn("{task.description}")) as progress:
         task = progress.add_task("初始化 AWS 客户端...", total=None)
         session = boto3.session.Session(region_name=region)
-        sts = session.client("sts")
-        ec2 = session.client("ec2")
+        sts     = session.client("sts")
+        ec2     = session.client("ec2")
         asg_cli = session.client("autoscaling")
-        iam = session.client("iam")
+        iam     = session.client("iam")
         progress.update(task, description="AWS 客户端初始化完成", completed=1)
 
-    # —— 2. 打印并确认 AWS 环境 ——
-    ident = sts.get_caller_identity()
+    # —— 2. 打印并确认 AWS 环境 —— #
+    ident   = sts.get_caller_identity()
     account = ident["Account"]
     try:
         alias = iam.list_account_aliases()["AccountAliases"][0]
@@ -49,16 +63,16 @@ def scale_asg(
     console.print(Panel(env_text, title="AWS 环境", border_style="cyan"))
     logger.info(f"AWS 环境 -> Account: {alias or account}, Region: {used_region}")
 
-    if not Confirm.ask("确认在以上环境中执行？"):
+    if not Confirm.ask("确认在上述环境中执行？", default=False):
         logger.info("用户取消操作")
         console.print("[bold red]已取消操作[/bold red]")
         raise typer.Exit()
 
-    # —— 3. 输入服务关键词 ——
+    # —— 3. 输入服务关键词 —— #
     svc = Prompt.ask("请输入服务关键词 (实例 Name 标签)")
     logger.info(f"服务关键词: {svc}")
 
-    # —— 4. 查询 EC2 实例（Name 标签 + 运行中） ——
+    # —— 4. 查询 EC2 实例（Name 标签 + 运行中） —— #
     with Progress(SpinnerColumn(), TextColumn("{task.description}")) as progress:
         task = progress.add_task("查询 EC2 实例...", total=None)
         resp = ec2.describe_instances(
@@ -76,14 +90,12 @@ def scale_asg(
         for t in ins.get("Tags", [])
         if t["Key"] == "Name"
     ]
-
     if not instance_names:
-        msg = f"未找到与 “{svc}” 相关的运行中实例，退出。"
-        console.print(f"[bold red]{msg}[/bold red]")
-        logger.info(msg)
+        console.print(f"[bold red]未找到与 “{svc}” 相关的运行中实例，退出。[/bold red]")
+        logger.info(f"No running instances matching {svc}")
         raise typer.Exit(1)
 
-    # —— 5. 去重 & 显示 ASG 列表 ——
+    # —— 5. 去重 & 显示 ASG 列表 —— #
     counts = {name: instance_names.count(name) for name in set(instance_names)}
     table = Table(title="搜索到的 ASG 列表", header_style="bold cyan")
     table.add_column("编号", style="bold", justify="right")
@@ -94,7 +106,7 @@ def scale_asg(
     console.print(table)
     logger.info(f"搜索结果: {counts}")
 
-    # —— 6. 用户选择 ——
+    # —— 6. 用户选择 —— #
     choice = Prompt.ask(
         "请选择要操作的编号",
         choices=[str(i) for i in range(1, len(counts) + 1)]
@@ -103,7 +115,7 @@ def scale_asg(
     chosen = list(counts.keys())[idx - 1]
     logger.info(f"选择编号: {idx}, ASG: {chosen}")
 
-    # —— 7. 查询并展示当前 ASG 配置 ——
+    # —— 7. 查询并展示当前 ASG 配置 —— #
     with Progress(SpinnerColumn(), TextColumn("{task.description}")) as progress:
         task = progress.add_task(f"查询 ASG [{chosen}] 配置...", total=None)
         detail = asg_cli.describe_auto_scaling_groups(
@@ -112,11 +124,11 @@ def scale_asg(
         progress.update(task, description="ASG 配置查询完成", completed=1)
 
     current = {
-        "Name": chosen,
+        "Name":    chosen,
         "Created": detail["CreatedTime"].strftime("%Y-%m-%d %H:%M:%S"),
         "Desired": detail["DesiredCapacity"],
-        "Min": detail["MinSize"],
-        "Max": detail["MaxSize"],
+        "Min":     detail["MinSize"],
+        "Max":     detail["MaxSize"],
     }
     conf_text = "\n".join(
         f"[bold]{k}:[/bold] {v}" if k in ("Name", "Created")
@@ -126,7 +138,7 @@ def scale_asg(
     console.print(Panel(conf_text, title="当前 ASG 配置", border_style="green"))
     logger.info(f"当前 ASG 配置: {current}")
 
-    # —— 8. 输入 & 验证新配置 ——
+    # —— 8. 输入 & 验证新配置 —— #
     while True:
         new_des = int(Prompt.ask("新 Desired", default=str(current["Desired"])))
         new_min = int(Prompt.ask("新 Min    ", default=str(current["Min"])))
@@ -135,25 +147,25 @@ def scale_asg(
         if new_min <= new_des <= new_max:
             break
         console.print("[bold red]错误：需满足 Min ≤ Desired ≤ Max。[/bold red]")
-        if not Confirm.ask("重试？"):
+        if not Confirm.ask("重试？", default=True):
             console.print("[bold red]操作已取消。[/bold red]")
             raise typer.Exit(1)
 
-    # —— 9. 预览变更 ——
+    # —— 9. 预览变更 —— #
     preview = Table(title="变更预览", header_style="bold magenta")
     preview.add_column("字段", style="cyan")
     preview.add_column("旧值", justify="right")
     preview.add_column("新值", justify="right")
     preview.add_row("Desired", str(current["Desired"]), f"[red]{new_des}[/red]")
-    preview.add_row("Min", str(current["Min"]), f"[red]{new_min}[/red]")
-    preview.add_row("Max", str(current["Max"]), f"[red]{new_max}[/red]")
+    preview.add_row("Min",     str(current["Min"]),     f"[red]{new_min}[/red]")
+    preview.add_row("Max",     str(current["Max"]),     f"[red]{new_max}[/red]")
     console.print(preview)
 
-    if not Confirm.ask("确认执行更新？"):
+    if not Confirm.ask("确认执行更新？", default=False):
         console.print("[bold red]操作已取消。[/bold red]")
         raise typer.Exit(0)
 
-    # —— 10. 应用更新 ——
+    # —— 10. 应用更新 —— #
     with Progress(SpinnerColumn(), TextColumn("{task.description}")) as progress:
         task = progress.add_task(f"更新 ASG [{chosen}]...", total=None)
         asg_cli.update_auto_scaling_group(
@@ -167,19 +179,18 @@ def scale_asg(
     console.print(f"[bold green]✅ 已更新 ASG {chosen}[/bold green]")
     logger.info(f"更新 ASG {chosen} -> Desired:{new_des}, Min:{new_min}, Max:{new_max}")
 
-    # —— 11. 展示更新后配置 ——
+    # —— 11. 展示更新后配置 —— #
     detail = asg_cli.describe_auto_scaling_groups(
         AutoScalingGroupNames=[chosen]
     )["AutoScalingGroups"][0]
     final = {
         "Desired": detail["DesiredCapacity"],
-        "Min": detail["MinSize"],
-        "Max": detail["MaxSize"],
+        "Min":     detail["MinSize"],
+        "Max":     detail["MaxSize"],
     }
     final_text = "\n".join(f"[green]{k}:[/green] {v}" for k, v in final.items())
     console.print(Panel(final_text, title="更新后配置", border_style="green"))
     logger.info(f"更新后配置: {final}")
-
 
 if __name__ == "__main__":
     app()
