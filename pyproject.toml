@@ -14,6 +14,9 @@ colorama = "^0.4.6"
 rich  = "^13.0"
 
 [tool.poetry.scripts]
+# top-level entry
+mytoolkit       = "mytoolkit.__main__:app"
+
 asg-scale = "mytoolkit.asg_scaler:app"
 asg-find = "mytoolkit.discover_asg:app"
 asg-batch-scale = "mytoolkit.batch_scale_asg:app"
