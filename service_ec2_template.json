@@ -1,0 +1,11 @@
+[
+  {
+    "ec2_name": "ng"
+  },
+  {
+    "ec2_name": "ngin"
+  },
+  {
+    "ec2_name": "service"
+  }
+]

@@ -1,0 +1,4 @@
+2025-05-10 10:03:39 [INFO] ng → nginx-xx-asg
+2025-05-10 10:03:41 [INFO] ngin → nginx-xx-asg-2
+2025-05-10 10:03:42 [INFO] service → None
+2025-05-10 10:03:42 [INFO] Exported mapping to /Users/yang/work-space/all-code/mytoolkit/discovered_asgs.json

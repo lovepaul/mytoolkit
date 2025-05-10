@@ -1,0 +1,17 @@
+{
+  "ng": {
+    "asg_name": "nginx-xx-asg-2",
+    "created": "2025-05-10 01:09:41",
+    "current": {
+      "n": 1,
+      "d": 1,
+      "x": 1
+    },
+    "target": {
+      "n": 2,
+      "d": 2,
+      "x": 2
+    },
+    "status": "skipped"
+  }
+}

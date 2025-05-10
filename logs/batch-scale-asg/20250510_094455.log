@@ -1,0 +1,3 @@
+2025-05-10 09:45:12 [INFO] Template generation input: /Users/yang/work-space/all-code/mytoolkit/discovered_asgs.json
+2025-05-10 09:45:12 [INFO] Invalid entries filtered: ['example-service']
+2025-05-10 09:45:15 [INFO] Printed batch scale template to console

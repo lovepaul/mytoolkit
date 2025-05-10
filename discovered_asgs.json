@@ -1,0 +1,14 @@
+[
+  {
+    "ec2_name": "ng",
+    "asg_name": "nginx-xx-asg"
+  },
+  {
+    "ec2_name": "ngin",
+    "asg_name": "nginx-xx-asg-2"
+  },
+  {
+    "ec2_name": "service",
+    "asg_name": null
+  }
+]

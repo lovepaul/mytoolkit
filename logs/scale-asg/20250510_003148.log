@@ -1,0 +1,8 @@
+2025-05-10 00:31:53 [INFO] AWS 环境 -> Account: 869742660350, Region: ap-east-1
+2025-05-10 00:31:57 [INFO] 服务关键词: ng
+2025-05-10 00:31:59 [INFO] 搜索结果: {'nginx-xx-asg': 2}
+2025-05-10 00:32:01 [INFO] 选择编号: 1, ASG: nginx-xx-asg
+2025-05-10 00:32:03 [INFO] 当前 ASG 配置: {'Name': 'nginx-xx-asg', 'Created': '2025-05-09 15:42:46', 'Desired': 2, 'Min': 2, 'Max': 2}
+2025-05-10 00:32:06 [INFO] 输入新配置 -> Desired:0, Min:0, Max:0
+2025-05-10 00:32:09 [INFO] 更新 ASG nginx-xx-asg -> Desired:0, Min:0, Max:0
+2025-05-10 00:32:09 [INFO] 更新后配置: {'Desired': 0, 'Min': 0, 'Max': 0}

@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "mytoolkit"
+version = "0.1.0"
+description = "AWS/业务自动化命令行工具集"
+authors = ["yang <lensman_yang@163.com>"]
+readme = "README.md"
+packages = [{ include = "mytoolkit", from = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+boto3 = "^1.28"
+typer = "^0.7.0"
+colorama = "^0.4.6"
+
+[tool.poetry.scripts]
+asg-scale = "mytoolkit.asg_scaler:app"
+asg-find = "mytoolkit.discover_asg:app"
+asg-batch-scale = "mytoolkit.batch_scale_asg:app"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
