@@ -11,6 +11,7 @@ python = ">=3.10,<4.0"
 boto3 = "^1.28"
 typer = "^0.7.0"
 colorama = "^0.4.6"
+rich  = "^13.0"
 
 [tool.poetry.scripts]
 asg-scale = "mytoolkit.asg_scaler:app"

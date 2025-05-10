@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.panel import Panel
 from mytoolkit.utils import get_logger, echo_error, echo_info
 
-app = typer.Typer(add_completion=False)
+app = typer.Typer(add_completion=True)
 console = Console()
 
 @app.command("batch-scale-asg")

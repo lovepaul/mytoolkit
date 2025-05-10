@@ -10,7 +10,7 @@ from rich.prompt import Prompt, Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from mytoolkit.utils import get_logger
 
-app = typer.Typer(add_completion=False)
+app = typer.Typer(add_completion=True)
 console = Console()
 
 @app.command("scale-asg")
