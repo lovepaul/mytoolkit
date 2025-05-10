@@ -1,14 +1,6 @@
 [
   {
-    "ec2_name": "ng",
+    "ec2_name": "nginx",
     "asg_name": "nginx-xx-asg"
-  },
-  {
-    "ec2_name": "ngin",
-    "asg_name": "nginx-xx-asg-2"
-  },
-  {
-    "ec2_name": "service",
-    "asg_name": null
   }
 ]
