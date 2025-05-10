@@ -50,8 +50,8 @@ def batch_scale_asg(
     # —— 0. 区域选择 —— #
     if region is None:
         console.print("请选择 AWS 区域：")
-        console.print("  [1] Asia Pacific (Hong Kong)        ap-east-1")
-        console.print("  [2] China (Ningxia)                   cn-northwest-1")
+        console.print("  [1] Asia Pacific (Hong Kong)    ap-east-1")
+        console.print("  [2] China (Ningxia)             cn-northwest-1")
         choice = Prompt.ask("输入编号", choices=["1", "2"], default="1")
         region = "ap-east-1" if choice == "1" else "cn-northwest-1"
     logger.info(f"使用区域: {region}")
@@ -79,17 +79,44 @@ def batch_scale_asg(
         with open(disc_path, "r", encoding="utf-8") as f:
             discovered = json.load(f)
 
-        # 1.c 分离有效/无效
+        # 1.c 分离有效/无效，处理列表类型 asg_name
         valid = []
         invalid = []
-        for e in discovered:
-            ec2 = e.get("ec2_name")
-            asg = e.get("asg_name")
-            if asg:
-                valid.append((ec2, asg))
+        for entry in discovered:
+            ec2 = entry.get("ec2_name")
+            asg_val = entry.get("asg_name")
+            # Normalize to list
+            if isinstance(asg_val, list):
+                candidates = asg_val
+            elif isinstance(asg_val, str):
+                candidates = [asg_val]
             else:
-                invalid.append(ec2)
+                candidates = []
 
+            if not candidates:
+                invalid.append(ec2)
+                continue
+
+            # 如果多个候选，让用户选择
+            if len(candidates) > 1:
+                console.print(f"[cyan]发现 ec2_name '{ec2}' 对应多个 ASG，请选择：[/cyan]")
+                table = Table(show_header=True, header_style="bold cyan")
+                table.add_column("编号", justify="right")
+                table.add_column("ASG 名称", style="green")
+                for idx, name in enumerate(candidates, start=1):
+                    table.add_row(str(idx), name)
+                console.print(table)
+                sel = Prompt.ask(
+                    "选择 ASG 编号",
+                    choices=[str(i) for i in range(1, len(candidates)+1)]
+                )
+                chosen = candidates[int(sel)-1]
+            else:
+                chosen = candidates[0]
+
+            valid.append((ec2, chosen))
+
+        # 警告无效项
         if invalid:
             console.print(
                 f"[bold red]⚠️ 以下 ec2_name 无对应 ASG，已从模板中过滤：{invalid}[/bold red]"
