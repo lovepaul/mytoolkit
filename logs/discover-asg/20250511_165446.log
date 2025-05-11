@@ -1,0 +1,4 @@
+2025-05-11 16:54:47 [INFO] 使用区域: ap-east-1
+2025-05-11 16:54:55 [INFO] nginx → nginx-xx-asg
+2025-05-11 16:54:56 [INFO] nginx → nginx-xx-asg-2
+2025-05-11 16:54:56 [INFO] Exported mapping to /Users/yang/work-space/all-code/mytoolkit/discovered_asgs.json

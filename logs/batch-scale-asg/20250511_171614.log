@@ -1,0 +1,4 @@
+2025-05-11 17:16:16 [INFO] 使用区域: ap-east-1
+2025-05-11 17:16:29 [INFO] Template generation input: /Users/yang/work-space/all-code/mytoolkit/discovered_asgs.json
+2025-05-11 17:16:31 [WARNING] ASG 'nginx-xx-asg-3' not found, skipping
+2025-05-11 17:16:31 [INFO] Generated batch scale template at /Users/yang/work-space/all-code/mytoolkit/batch_scale_template_20250511_171631.json

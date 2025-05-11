@@ -1,0 +1,16 @@
+{
+  "nginx": {
+    "asg_name": "nginx-xx-asg-2",
+    "created": "2025-05-10 23:14:29",
+    "current": {
+      "n": 2,
+      "d": 2,
+      "x": 2
+    },
+    "target": {
+      "n": 2,
+      "d": 2,
+      "x": 2
+    }
+  }
+}

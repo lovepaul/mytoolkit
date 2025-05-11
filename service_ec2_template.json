@@ -1,5 +1,8 @@
 [
   {
     "ec2_name": "nginx"
+  },
+  {
+    "ec2_name": "nginx"
   }
 ]

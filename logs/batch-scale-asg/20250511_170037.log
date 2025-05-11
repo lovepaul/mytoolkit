@@ -1,0 +1,3 @@
+2025-05-11 17:00:39 [INFO] 使用区域: ap-east-1
+2025-05-11 17:00:53 [INFO] Template generation input: /Users/yang/work-space/all-code/mytoolkit/discovered_asgs.json
+2025-05-11 17:00:56 [INFO] Generated batch scale template at /Users/yang/work-space/all-code/mytoolkit/logs/batch-scale-asg/batch_scale_template_20250511_170056.json

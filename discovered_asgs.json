@@ -2,5 +2,25 @@
   {
     "ec2_name": "nginx",
     "asg_name": "nginx-xx-asg"
+  },
+  {
+    "ec2_name": "nginx",
+    "asg_name": "nginx-xx-asg-2"
+  },
+  {
+    "ec2_name": "nginx2",
+    "asg_name": "nginx-xx-asg-3"
+  },
+    {
+    "ec2_name": "nginx2",
+    "asg_name": "nginx-xx-asg-4"
+  },
+    {
+    "ec2_name": "nginx2",
+    "asg_name": "nginx-xx-asg-5"
+  },
+    {
+    "ec2_name": "nginx2",
+    "asg_name": "nginx-xx-asg-6"
   }
 ]

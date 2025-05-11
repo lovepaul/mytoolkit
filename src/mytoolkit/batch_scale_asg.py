@@ -16,6 +16,7 @@ from mytoolkit.utils import get_logger, echo_error, echo_info
 app = typer.Typer(add_completion=True)
 console = Console()
 
+
 @app.command("batch-scale-asg")
 def batch_scale_asg(
     get_template: bool = typer.Option(
@@ -32,18 +33,18 @@ def batch_scale_asg(
     ),
 ):
     """
-    生成或执行批量 ASG 扩/缩容计划 (JSON 对象形式)。
-
-    模板 & 计划格式示例:
-    {
-      "ng": {
-        "asg_name": "nginx-xx-asg",
-        "created": "2025-05-09 15:42:46",
-        "current": {"n":1,"d":1,"x":3},
-        "target":  {"n":1,"d":1,"x":3}
-      },
-      ...
-    }
+    生成或执行批量 ASG 扩/缩容计划 (JSON 列表形式)。
+    模板示例:
+      [
+        {
+          "ec2_name": "nginx",
+          "asg_name": "nginx-xx-asg-1",
+          "created": "...",
+          "current": {"n":2,"d":2,"x":2},
+          "target":  {"n":2,"d":2,"x":2}
+        },
+        ...
+      ]
     """
     logger = get_logger("batch-scale-asg")
 
@@ -56,7 +57,6 @@ def batch_scale_asg(
         region = "ap-east-1" if choice == "1" else "cn-northwest-1"
     logger.info(f"使用区域: {region}")
 
-    # AWS session and identity
     session = boto3.session.Session(region_name=region)
     sts = session.client("sts")
     ident = sts.get_caller_identity()
@@ -65,7 +65,7 @@ def batch_scale_asg(
 
     # —— 1. 模板生成模式 —— #
     if get_template:
-        # 1.a 输入 discover-asg 输出
+        # 1.a 输入 discover-asg 输出路径
         while not input_json:
             input_json = Prompt.ask("请输入 discover-asg 输出 JSON 路径")
         disc_path = os.path.abspath(os.path.expanduser(input_json))
@@ -75,11 +75,14 @@ def batch_scale_asg(
             echo_error(f"文件不存在：{disc_path}")
             raise typer.Exit(1)
 
-        # 1.b 读取 discovered
+        # 1.b 读取 discovered 列表
         with open(disc_path, "r", encoding="utf-8") as f:
             discovered = json.load(f)
+        if not isinstance(discovered, list):
+            echo_error("discover-asg 输出必须是 JSON 数组")
+            raise typer.Exit(1)
 
-        # 1.c 分离有效/无效，处理列表类型 asg_name
+        # 1.c 分离有效/无效，处理多候选 ASG 名称
         valid = []
         invalid = []
         for entry in discovered:
@@ -97,7 +100,6 @@ def batch_scale_asg(
                 invalid.append(ec2)
                 continue
 
-            # 如果多个候选，让用户选择
             if len(candidates) > 1:
                 console.print(f"[cyan]发现 ec2_name '{ec2}' 对应多个 ASG，请选择：[/cyan]")
                 table = Table(show_header=True, header_style="bold cyan")
@@ -108,47 +110,54 @@ def batch_scale_asg(
                 console.print(table)
                 sel = Prompt.ask(
                     "选择 ASG 编号",
-                    choices=[str(i) for i in range(1, len(candidates)+1)]
+                    choices=[str(i) for i in range(1, len(candidates) + 1)]
                 )
-                chosen = candidates[int(sel)-1]
+                chosen = candidates[int(sel) - 1]
             else:
                 chosen = candidates[0]
 
             valid.append((ec2, chosen))
 
-        # 警告无效项
+        # 1.d 警告无效项
         if invalid:
             console.print(
                 f"[bold red]⚠️ 以下 ec2_name 无对应 ASG，已从模板中过滤：{invalid}[/bold red]"
             )
             logger.info(f"Invalid entries filtered: {invalid}")
 
-        # 1.d 构建模板映射
-        template = {}
+        # 1.e 构建模板列表，跳过不存在的 ASG
+        template_list = []
         for ec2, asg in valid:
-            detail = asg_cli.describe_auto_scaling_groups(
-                AutoScalingGroupNames=[asg]
-            )["AutoScalingGroups"][0]
+            resp = asg_cli.describe_auto_scaling_groups(AutoScalingGroupNames=[asg])
+            groups = resp.get("AutoScalingGroups", [])
+            if not groups:
+                console.print(f"[yellow]⚠️ ASG '{asg}' 未找到，已跳过[/yellow]")
+                logger.warning(f"ASG '{asg}' not found, skipping")
+                continue
+            detail = groups[0]
             created = detail["CreatedTime"].strftime("%Y-%m-%d %H:%M:%S")
             cd = detail["DesiredCapacity"]
             mn = detail["MinSize"]
             mx = detail["MaxSize"]
-            template[ec2] = {
+            template_list.append({
+                "ec2_name": ec2,
                 "asg_name": asg,
                 "created": created,
                 "current": {"n": mn, "d": cd, "x": mx},
                 "target":  {"n": mn, "d": cd, "x": mx}
-            }
+            })
 
-        # 1.e 写入模板文件
-        tpl_dir = os.path.join(os.getcwd(), "logs", "batch-scale-asg")
-        os.makedirs(tpl_dir, exist_ok=True)
+        if not template_list:
+            console.print("[bold red]⚠️ 无可用 ASG 模板，已退出[/bold red]")
+            raise typer.Exit(1)
+
+        # 1.f 写入模板到当前工作目录
         tpl_path = os.path.join(
-            tpl_dir,
+            os.getcwd(),
             f"batch_scale_template_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         )
         with open(tpl_path, "w", encoding="utf-8") as f:
-            json.dump(template, f, indent=2, ensure_ascii=False)
+            json.dump(template_list, f, indent=2, ensure_ascii=False)
 
         echo_info(f"✅ 模板已生成：{tpl_path}")
         logger.info(f"Generated batch scale template at {tpl_path}")
@@ -172,75 +181,73 @@ def batch_scale_asg(
     except Exception as e:
         echo_error(f"解析 JSON 失败：{e}")
         raise typer.Exit(1)
-    if not isinstance(plan, dict) or not plan:
-        echo_error("JSON 必须是非空对象 (mapping)")
+    if not isinstance(plan, list) or not plan:
+        echo_error("JSON 必须是非空数组 (list)")
         raise typer.Exit(1)
 
-    # 2.b 校验字段与逻辑
-    seen_asgs = set()
-    for ec2, e in plan.items():
-        asg = e.get("asg_name")
-        if not isinstance(ec2, str) or not ec2.strip():
-            echo_error(f"[{ec2}] 无效的 ec2_name 键")
+    # 2.b 校验计划项格式和逻辑
+    seen = set()
+    for idx, entry in enumerate(plan, start=1):
+        ec2 = entry.get("ec2_name")
+        asg = entry.get("asg_name")
+        if not ec2 or not isinstance(ec2, str):
+            echo_error(f"第 {idx} 项：ec2_name 无效")
             raise typer.Exit(1)
-        if not isinstance(e, dict):
-            echo_error(f"[{ec2}] 值必须是对象")
+        if not asg or not isinstance(asg, str):
+            echo_error(f"第 {idx} 项：asg_name 无效")
             raise typer.Exit(1)
-        for fld in ("asg_name", "created", "current", "target"):
-            if fld not in e:
-                echo_error(f"[{ec2}] 缺少字段 '{fld}'")
-                raise typer.Exit(1)
-        if not asg:
-            echo_error(f"[bold red][{ec2}] asg_name 为空，无法执行[/bold red]")
+        if asg in seen:
+            echo_error(f"第 {idx} 项：asg_name '{asg}' 重复")
             raise typer.Exit(1)
-        if asg in seen_asgs:
-            echo_error(f"[{ec2}] asg_name 重复 '{asg}'")
-            raise typer.Exit(1)
-        seen_asgs.add(asg)
-        for block in ("current", "target"):
-            blk = e[block]
+        seen.add(asg)
+        for blk_name in ("current", "target"):
+            blk = entry.get(blk_name)
             if not isinstance(blk, dict) or not all(k in blk for k in ("n", "d", "x")):
-                echo_error(f"[{ec2}] '{block}' 必须包含 'n','d','x'")
+                echo_error(f"第 {idx} 项：'{blk_name}' 必须包含 n, d, x")
                 raise typer.Exit(1)
             if not all((blk[k] is None or isinstance(blk[k], int)) for k in blk):
-                echo_error(f"[{ec2}] '{block}' 值必须为整数或 null")
+                echo_error(f"第 {idx} 项：'{blk_name}' 值必须为整数或 null")
                 raise typer.Exit(1)
-        tmin, td, tmax = e["target"]["n"], e["target"]["d"], e["target"]["x"]
+        tmin, td, tmax = entry["target"]["n"], entry["target"]["d"], entry["target"]["x"]
         if not (tmin <= td <= tmax):
             echo_error(
-                f"[{ec2}] 对应 ASG [{asg}] 的目标配置不合法："
-                f"min(n)={tmin}, desired(d)={td}, max(x)={tmax}，需满足 n ≤ d ≤ x"
+                f"第 {idx} 项：目标配置不合法 (n={tmin}, d={td}, x={tmax})，需满足 n ≤ d ≤ x"
             )
             raise typer.Exit(1)
 
-    # 3. 展示并确认批量计划
-    table = Table(title="批量缩放计划", header_style="bold magenta")
+    # 3. 展示 & 确认
+    table = Table(title="批量缩放计划预览", header_style="bold magenta")
     table.add_column("No.", justify="right")
     table.add_column("ec2_name", style="cyan")
     table.add_column("asg_name", style="green")
-    table.add_column("current [n/d/x]", justify="center")
-    table.add_column("target  [n/d/x]", justify="center")
-    for idx, (ec2, e) in enumerate(plan.items(), start=1):
-        curr = f"{e['current']['n']}/{e['current']['d']}/{e['current']['x']}"
-        targ = f"{e['target']['n']}/{e['target']['d']}/{e['target']['x']}"
-        table.add_row(str(idx), ec2, e["asg_name"], curr, targ)
+    table.add_column("current[n/d/x]", justify="center")
+    table.add_column("target [n/d/x]", justify="center")
+    for idx, entry in enumerate(plan, start=1):
+        curr = f"{entry['current']['n']}/{entry['current']['d']}/{entry['current']['x']}"
+        targ = f"{entry['target']['n']}/{entry['target']['d']}/{entry['target']['x']}"
+        table.add_row(str(idx), entry["ec2_name"], entry["asg_name"], curr, targ)
     console.print(table)
-    if not Confirm.ask("确认以上批量缩放计划？", default=False):
+    if not Confirm.ask("确认执行以上批量缩放计划？", default=False):
         console.print("[bold red]操作已取消[/bold red]")
         raise typer.Exit(0)
 
     # 4. 遍历执行，每项单独确认
-    for ec2, e in plan.items():
-        asg = e["asg_name"]
-        detail = asg_cli.describe_auto_scaling_groups(
-            AutoScalingGroupNames=[asg]
-        )["AutoScalingGroups"][0]
+    for entry in plan:
+        ec2 = entry["ec2_name"]
+        asg = entry["asg_name"]
+        resp = asg_cli.describe_auto_scaling_groups(AutoScalingGroupNames=[asg])
+        groups = resp.get("AutoScalingGroups", [])
+        if not groups:
+            console.print(f"[yellow]⚠️ ASG '{asg}' 未找到，已跳过更新[/yellow]")
+            entry["status"] = "skipped"
+            continue
+        detail = groups[0]
         cd, mn, mx = detail["DesiredCapacity"], detail["MinSize"], detail["MaxSize"]
-        td, tmin, tmax = e["target"]["d"], e["target"]["n"], e["target"]["x"]
+        td, tmin, tmax = entry["target"]["d"], entry["target"]["n"], entry["target"]["x"]
 
         if cd == td and mn == tmin and mx == tmax:
             console.print(f"[yellow]ASG {asg}: 当前与目标一致，跳过[/yellow]")
-            e["status"] = "skipped"
+            entry["status"] = "skipped"
             continue
 
         info = (
@@ -251,7 +258,7 @@ def batch_scale_asg(
         console.print(Panel(info, title="单条确认", border_style="cyan"))
         if not Confirm.ask(f"确认更新 {asg}?", default=False):
             console.print(f"[yellow]已跳过 {asg}[/yellow]")
-            e["status"] = "skipped"
+            entry["status"] = "skipped"
             continue
 
         with Progress(SpinnerColumn(), TextColumn("{task.description}")) as prog:
@@ -265,11 +272,11 @@ def batch_scale_asg(
             prog.update(task, description="更新完成", completed=1)
 
         console.print(f"[bold green]✅ {asg} 更新完成[/bold green]")
-        e["status"] = "updated"
-        e["updated_by"] = user_arn
-        e["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry["status"] = "updated"
+        entry["updated_by"] = user_arn
+        entry["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 5. 写回执行结果到日志目录
+    # 5. 写回结果到 logs 目录
     log_dir = os.path.join(os.getcwd(), "logs", "batch-scale-asg")
     os.makedirs(log_dir, exist_ok=True)
     result_path = os.path.join(
@@ -281,6 +288,7 @@ def batch_scale_asg(
 
     echo_info(f"✅ 批量缩放结果已保存：{result_path}")
     logger.info(f"Batch scale result written to {result_path}")
+
 
 if __name__ == "__main__":
     app()
