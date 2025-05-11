@@ -19,18 +19,18 @@ console = Console()
 
 @app.command("batch-scale-asg")
 def batch_scale_asg(
-    get_template: bool = typer.Option(
-        False, "--get-template-json", "-t",
-        help="根据 discover-asg 输出生成批量缩放模板"
-    ),
-    input_json: str = typer.Option(
-        None, "--input-json", "-i",
-        help="discover-asg 输出文件路径 (支持 Windows/Mac)"
-    ),
-    region: str = typer.Option(
-        None, "--region", "-r",
-        help="AWS 区域 (例如 ap-east-1, cn-northwest-1)"
-    ),
+        get_template: bool = typer.Option(
+            False, "--get-template-json", "-t",
+            help="根据 discover-asg 输出生成批量缩放模板"
+        ),
+        input_json: str = typer.Option(
+            None, "--input-json", "-i",
+            help="discover-asg 输出文件路径 (支持 Windows/Mac)"
+        ),
+        region: str = typer.Option(
+            None, "--region", "-r",
+            help="AWS 区域 (例如 ap-east-1, cn-northwest-1)"
+        ),
 ):
     """
     生成或执行批量 ASG 扩/缩容计划 (JSON 列表形式)。
@@ -40,8 +40,8 @@ def batch_scale_asg(
           "ec2_name": "nginx",
           "asg_name": "nginx-xx-asg-1",
           "created": "...",
-          "current": {"n":2,"d":2,"x":2},
-          "target":  {"n":2,"d":2,"x":2}
+          "current": {"desired":2,"min":2,"max":2},
+          "target":  {"desired":2,"min":2,"max":2}
         },
         ...
       ]
@@ -143,8 +143,8 @@ def batch_scale_asg(
                 "ec2_name": ec2,
                 "asg_name": asg,
                 "created": created,
-                "current": {"n": mn, "d": cd, "x": mx},
-                "target":  {"n": mn, "d": cd, "x": mx}
+                "current": {"desired": cd, "min": mn, "max": mx},
+                "target": {"desired": cd, "min": mn, "max": mx}
             })
 
         if not template_list:
@@ -202,16 +202,16 @@ def batch_scale_asg(
         seen.add(asg)
         for blk_name in ("current", "target"):
             blk = entry.get(blk_name)
-            if not isinstance(blk, dict) or not all(k in blk for k in ("n", "d", "x")):
+            if not isinstance(blk, dict) or not all(k in blk for k in ("min", "desired", "max")):
                 echo_error(f"第 {idx} 项：'{blk_name}' 必须包含 n, d, x")
                 raise typer.Exit(1)
             if not all((blk[k] is None or isinstance(blk[k], int)) for k in blk):
                 echo_error(f"第 {idx} 项：'{blk_name}' 值必须为整数或 null")
                 raise typer.Exit(1)
-        tmin, td, tmax = entry["target"]["n"], entry["target"]["d"], entry["target"]["x"]
+        tmin, td, tmax = entry["target"]["min"], entry["target"]["desired"], entry["target"]["max"]
         if not (tmin <= td <= tmax):
             echo_error(
-                f"第 {idx} 项：目标配置不合法 (n={tmin}, d={td}, x={tmax})，需满足 n ≤ d ≤ x"
+                f"第 {idx} 项：目标配置不合法 (desired={td}, min={tmin}, max={tmax})，需满足 n ≤ d ≤ x"
             )
             raise typer.Exit(1)
 
@@ -220,11 +220,11 @@ def batch_scale_asg(
     table.add_column("No.", justify="right")
     table.add_column("ec2_name", style="cyan")
     table.add_column("asg_name", style="green")
-    table.add_column("current[n/d/x]", justify="center")
-    table.add_column("target [n/d/x]", justify="center")
+    table.add_column("current[desired/min/max]", justify="center")
+    table.add_column("target [desired/min/max]", justify="center")
     for idx, entry in enumerate(plan, start=1):
-        curr = f"{entry['current']['n']}/{entry['current']['d']}/{entry['current']['x']}"
-        targ = f"{entry['target']['n']}/{entry['target']['d']}/{entry['target']['x']}"
+        curr = f"{entry['current']['desired']}/{entry['current']['min']}/{entry['current']['max']}"
+        targ = f"{entry['target']['desired']}/{entry['target']['min']}/{entry['target']['max']}"
         table.add_row(str(idx), entry["ec2_name"], entry["asg_name"], curr, targ)
     console.print(table)
     if not Confirm.ask("确认执行以上批量缩放计划？", default=False):
@@ -243,7 +243,7 @@ def batch_scale_asg(
             continue
         detail = groups[0]
         cd, mn, mx = detail["DesiredCapacity"], detail["MinSize"], detail["MaxSize"]
-        td, tmin, tmax = entry["target"]["d"], entry["target"]["n"], entry["target"]["x"]
+        td, tmin, tmax = entry["target"]["desired"], entry["target"]["min"], entry["target"]["max"]
 
         if cd == td and mn == tmin and mx == tmax:
             console.print(f"[yellow]ASG {asg}: 当前与目标一致，跳过[/yellow]")

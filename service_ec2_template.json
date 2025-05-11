@@ -1,8 +1,11 @@
 [
   {
-    "ec2_name": "nginx"
+    "ec2_name": "ng"
   },
   {
     "ec2_name": "nginx"
+  },
+  {
+    "ec2_name": "error-ec2-name"
   }
 ]

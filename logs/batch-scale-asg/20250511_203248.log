@@ -1,0 +1,4 @@
+2025-05-11 20:32:49 [INFO] 使用区域: ap-east-1
+2025-05-11 20:32:56 [INFO] Template generation input: /Users/yang/work-space/all-code/mytoolkit/discovered_asgs.json
+2025-05-11 20:32:56 [INFO] Invalid entries filtered: ['error-ec2-name']
+2025-05-11 20:32:58 [INFO] Generated batch scale template at /Users/yang/work-space/all-code/mytoolkit/batch_scale_template_20250511_203258.json

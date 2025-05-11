@@ -1,0 +1,32 @@
+[
+  {
+    "ec2_name": "ng",
+    "asg_name": "nginx-xx-asg",
+    "created": "2025-05-10 23:15:33",
+    "current": {
+      "desired": 2,
+      "min": 2,
+      "max": 2
+    },
+    "target": {
+      "desired": 2,
+      "min": 2,
+      "max": 2
+    }
+  },
+  {
+    "ec2_name": "nginx",
+    "asg_name": "nginx-xx-asg-2",
+    "created": "2025-05-10 23:14:29",
+    "current": {
+      "desired": 1,
+      "min": 1,
+      "max": 1
+    },
+    "target": {
+      "desired": 1,
+      "min": 1,
+      "max": 1
+    }
+  }
+]
